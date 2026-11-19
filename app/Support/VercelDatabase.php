@@ -152,12 +152,13 @@ class VercelDatabase
             return true;
         }
 
-        if (! $onVercel) {
-            return false;
+        // Di Vercel atau saat APP_ENV=production tanpa URL/host eksternal yang valid,
+        // otomatis gunakan SQLite agar aplikasi tidak crash karena mencoba koneksi lokal (127.0.0.1).
+        if ($onVercel || getenv('APP_ENV') === 'production' || env('APP_ENV') === 'production') {
+            return $url === null && $host === null;
         }
 
-        // Di Vercel, tanpa URL/host yang valid jangan pernah pakai driver eksternal.
-        return $url === null && $host === null;
+        return false;
     }
 
     /**
@@ -167,13 +168,15 @@ class VercelDatabase
      */
     public static function sqliteDatabase($configured, bool $onVercel): string
     {
+        $isServerless = $onVercel || getenv('APP_ENV') === 'production' || env('APP_ENV') === 'production';
+
         if (self::isPlaceholder($configured)) {
-            return $onVercel ? '/tmp/database.sqlite' : database_path('database.sqlite');
+            return $isServerless ? '/tmp/database.sqlite' : database_path('database.sqlite');
         }
 
         $path = trim((string) $configured);
 
-        if ($onVercel
+        if ($isServerless
             && ! str_starts_with($path, '/tmp/')
             && ! str_ends_with(strtolower($path), '.sqlite')) {
             return '/tmp/database.sqlite';

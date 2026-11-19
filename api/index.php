@@ -22,30 +22,60 @@ $publicRoot = realpath($projectRoot.'/public');
 // Helper validasi DB dipakai bersama config/database.php dan scripts/vercel-db.php.
 require_once $projectRoot.'/app/Support/VercelDatabase.php';
 
-// Di Vercel hanya /tmp yang bisa ditulis.
-foreach ([
+// Di Vercel hanya /tmp yang bisa ditulis. Pastikan semua folder writable Laravel
+// otomatis dibuat di /tmp sebelum aplikasi Laravel di-bootstrap.
+$writableDirectories = [
     '/tmp/views',
     '/tmp/storage/app/private',
     '/tmp/storage/app/public',
+    '/tmp/storage/framework/views',
+    '/tmp/storage/framework/cache',
     '/tmp/storage/framework/cache/data',
     '/tmp/storage/framework/sessions',
     '/tmp/storage/logs',
-] as $directory) {
+    '/tmp/bootstrap/cache',
+];
+
+foreach ($writableDirectories as $directory) {
     if (! is_dir($directory)) {
         @mkdir($directory, 0777, true);
     }
 }
 
+// Inisialisasi environment variable penting agar Laravel mengarahkan
+// seluruh cache, views, logs, dan sessions ke /tmp yang writable.
+$defaultEnvs = [
+    'VERCEL' => '1',
+    'LARAVEL_STORAGE_PATH' => '/tmp/storage',
+    'VIEW_COMPILED_PATH' => '/tmp/storage/framework/views',
+    'APP_SERVICES_CACHE' => '/tmp/bootstrap/cache/services.php',
+    'APP_PACKAGES_CACHE' => '/tmp/bootstrap/cache/packages.php',
+    'APP_CONFIG_CACHE' => '/tmp/bootstrap/cache/config.php',
+    'APP_ROUTES_CACHE' => '/tmp/bootstrap/cache/routes-v7.php',
+    'APP_EVENTS_CACHE' => '/tmp/bootstrap/cache/events.php',
+    'LOG_CHANNEL' => getenv('LOG_CHANNEL') ?: 'stderr',
+    'SESSION_DRIVER' => getenv('SESSION_DRIVER') ?: 'cookie',
+    'CACHE_STORE' => getenv('CACHE_STORE') ?: 'array',
+];
+
+foreach ($defaultEnvs as $key => $value) {
+    if (getenv($key) === false || getenv($key) === '') {
+        putenv("{$key}={$value}");
+    }
+    $_ENV[$key] = $_ENV[$key] ?? $value;
+    $_SERVER[$key] = $_SERVER[$key] ?? $value;
+}
+
 /*
 | Fallback SQLite: file di /tmp tidak ikut ter-pack dari proses build, jadi
-| saat cold start kita buat lalu migrate + seed. Dijalankan di proses PHP
-| terpisah supaya public/index.php tetap menjadi satu-satunya bootstrap
-| untuk request HTTP (menghindari require_once bootstrap/app.php dua kali).
+| saat cold start kita salin database awal (atau buat + migrate + seed).
+| Dijalankan di proses PHP terpisah supaya public/index.php tetap menjadi
+| satu-satunya bootstrap untuk request HTTP.
 |
 | Validasi DB_URL/DB_HOST memakai helper yang sama dengan config/database.php,
-| sehingga placeholder "..." tidak pernah diteruskan ke PDO.
+| sehingga placeholder "..." atau host localhost/127.0.0.1 tidak diteruskan ke PDO.
 */
-$onVercel = getenv('VERCEL') !== false;
+$onVercel = true;
 $dbUrl = \App\Support\VercelDatabase::validUrl(getenv('DB_URL') ?: null);
 $dbHost = \App\Support\VercelDatabase::validHost(getenv('DB_HOST') ?: null);
 $useSqlite = \App\Support\VercelDatabase::shouldUseSqlite(
@@ -62,16 +92,31 @@ $databasePath = \App\Support\VercelDatabase::sqliteDatabase(
 if ($useSqlite
     && str_starts_with($databasePath, '/tmp/')
     && ! file_exists($databasePath)) {
-    @touch($databasePath);
+    $candidates = [
+        $projectRoot.'/database/database.sqlite',
+        $projectRoot.'/db_badminton',
+    ];
+    $copied = false;
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate) && filesize($candidate) > 0) {
+            @copy($candidate, $databasePath);
+            $copied = true;
+            break;
+        }
+    }
 
-    $artisan = $projectRoot.'/artisan';
+    if (! $copied) {
+        @touch($databasePath);
 
-    if (is_file($artisan) && function_exists('exec')) {
-        $php = escapeshellarg(PHP_BINARY);
-        $artisanPath = escapeshellarg($artisan);
+        $artisan = $projectRoot.'/artisan';
 
-        exec($php.' '.$artisanPath.' migrate --force --no-interaction 2>&1');
-        exec($php.' '.$artisanPath.' db:seed --force --no-interaction 2>&1');
+        if (is_file($artisan) && function_exists('exec')) {
+            $php = escapeshellarg(PHP_BINARY);
+            $artisanPath = escapeshellarg($artisan);
+
+            exec($php.' '.$artisanPath.' migrate --force --no-interaction 2>&1');
+            exec($php.' '.$artisanPath.' db:seed --force --no-interaction 2>&1');
+        }
     }
 }
 

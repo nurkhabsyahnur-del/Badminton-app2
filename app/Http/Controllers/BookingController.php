@@ -16,21 +16,30 @@ class BookingController extends Controller
 {
     public function index(Request $request)
     {
-        // Auto-cancel pemesanan yang lewat batas 5 menit agar slot kembali kosong
-        Pemesanan::where('status', 'menunggu_pembayaran')
-            ->where('batas_pembayaran', '<', Carbon::now())
-            ->update(['status' => 'dibatalkan']);
+        try {
+            // Auto-cancel pemesanan yang lewat batas 5 menit agar slot kembali kosong
+            Pemesanan::where('status', 'menunggu_pembayaran')
+                ->where('batas_pembayaran', '<', Carbon::now())
+                ->update(['status' => 'dibatalkan']);
 
-        $lapangans = Lapangan::where('status', 'tersedia')->orderBy('nomor_lapangan', 'asc')->get();
+            $lapangans = Lapangan::where('status', 'tersedia')->orderBy('nomor_lapangan', 'asc')->get();
+        } catch (\Throwable $e) {
+            $lapangans = collect();
+        }
+
         $selectedDate = $request->get('tanggal', Carbon::today()->format('Y-m-d'));
         $selectedLapanganId = $request->get('lapangan_id', $lapangans->first()?->id);
 
-        $bookings = Pemesanan::with('user')
-            ->where('lapangan_id', $selectedLapanganId)
-            ->where('tanggal_main', $selectedDate)
-            ->whereIn('status', ['menunggu_pembayaran', 'menunggu_konfirmasi', 'terkonfirmasi'])
-            ->orderBy('jam_mulai', 'asc')
-            ->get();
+        try {
+            $bookings = $selectedLapanganId ? Pemesanan::with('user')
+                ->where('lapangan_id', $selectedLapanganId)
+                ->where('tanggal_main', $selectedDate)
+                ->whereIn('status', ['menunggu_pembayaran', 'menunggu_konfirmasi', 'terkonfirmasi'])
+                ->orderBy('jam_mulai', 'asc')
+                ->get() : collect();
+        } catch (\Throwable $e) {
+            $bookings = collect();
+        }
 
         return view('booking.index', compact('lapangans', 'selectedDate', 'selectedLapanganId', 'bookings'));
     }

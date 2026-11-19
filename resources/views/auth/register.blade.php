@@ -15,6 +15,13 @@
                     <p class="text-muted small">Buat akun untuk memesan lapangan badminton online secara praktis.</p>
                 </div>
 
+                @if($errors->has('register_error'))
+                    <div class="alert alert-danger py-2 small rounded-3 d-flex align-items-center gap-2 mb-3">
+                        <i class="bi bi-exclamation-circle-fill"></i>
+                        {{ $errors->first('register_error') }}
+                    </div>
+                @endif
+
                 <form action="{{ route('register') }}" method="POST">
                     @csrf
                     <div class="mb-3">

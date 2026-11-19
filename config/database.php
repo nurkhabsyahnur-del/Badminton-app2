@@ -13,7 +13,9 @@ use Pdo\Mysql;
 |
 | Bila tidak ada URL/host eksternal yang valid, pakai SQLite /tmp.
 */
-$onVercel = (bool) env('VERCEL');
+$onVercel = (getenv('VERCEL') !== false && getenv('VERCEL') !== '')
+    || (bool) env('VERCEL')
+    || env('APP_ENV') === 'production';
 
 $dbUrl = VercelDatabase::validUrl(env('DB_URL'));
 $dbHost = VercelDatabase::validHost(env('DB_HOST'));

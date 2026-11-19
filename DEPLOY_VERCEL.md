@@ -44,6 +44,7 @@ Paling penting:
 | Key | Contoh | Catatan |
 | --- | --- | --- |
 | `APP_KEY` | `base64:...` | Generate dengan `php artisan key:generate`. Ganti key demo jika mau. |
+| `APP_URL` | `https://nama-project.vercel.app` | Wajib `https://`, ganti dengan domain produksi Anda. Jangan kosongkan/diisi `http://`. |
 | `APP_ENV` | `production` | |
 | `APP_DEBUG` | `false` | |
 | `DB_CONNECTION` | `pgsql` | atau `mysql` |
@@ -53,7 +54,7 @@ Paling penting:
 | `QUEUE_CONNECTION` | `sync` | |
 | `UPLOAD_DRIVER` | `database` | |
 
-`APP_URL` boleh dikosongkan karena `api/index.php` akan mengisi dari host Vercel secara otomatis.
+`APP_URL` harus diisi dengan URL produksi berskema `https://`. `api/index.php` tidak mengisi nilai ini secara otomatis; jika kosong, Laravel bisa menghasilkan action form/redirect dengan skema `http://` dan browser menampilkan peringatan *"The information you're about to submit is not secure"*. Di aplikasi, `URL::forceScheme('https')` dan trusted proxy juga memastikan URL tetap HTTPS di balik reverse proxy Vercel.
 
 ---
 
@@ -139,4 +140,5 @@ Buka `http://localhost:8000`.
 - **CSS/JS 404** → pastikan `npm run build` berhasil dan `public/build/manifest.json` ikut ter-upload. Cek log build Vercel.
 - **Error `127.0.0.1:5432`** → isi `DB_URL`/`DB_HOST` dengan host asli, atau biarkan `DB_CONNECTION=sqlite` + `DB_URL=` kosong.
 - **Error `could not translate host name "..." to address`** → ada env `DB_HOST`/`DB_URL` yang masih berisi placeholder `...`. Aplikasi sekarang membuang nilai itu dan memakai SQLite `/tmp`, tetapi sebaiknya hapus/perbarui env tersebut di Dashboard agar tidak membingungkan.
+- **Peringatan browser "The information you're about to submit is not secure" saat login/register** → pastikan `APP_URL` di Vercel memakai `https://` (bukan kosong/`http://`), `APP_ENV=production`, lalu **Redeploy** agar env/cache terbaru dipakai. Cek `View source` halaman login: `action` form harus diawali `https://`.
 - **Function timeout saat cold start** → `maxDuration` sudah diset 60 detik di `vercel.json`; bisa dinaikkan di dashboard jika pakai plan berbayar.
