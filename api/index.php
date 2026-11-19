@@ -2,18 +2,17 @@
 
 declare(strict_types=1);
 
-define('LARAVEL_START', microtime(true));
-
 /*
 |--------------------------------------------------------------------------
 | Vercel entry point untuk Laravel
 |--------------------------------------------------------------------------
 |
-| File ini menggantikan peran web server (Nginx/Apache) di Vercel:
-| - menyajikan aset statis dari folder public/
-| - menyiapkan direktori writable di /tmp
-| - menjalankan migrate + seed otomatis untuk SQLite sementara
-| - meneruskan request ke Laravel.
+| Request dinamis diarahkan ke file ini oleh vercel.json. Aset statis
+| (/build/*, /assets/*, /images/*, dll.) sudah diarahkan langsung ke folder
+| public/ oleh @vercel/static. Fallback di bawah dipakai hanya bila file
+| hasil npm run build belum terlihat oleh builder statis.
+|
+| PENTING: Laravel tetap diproses oleh public/index.php.
 |
 */
 
@@ -21,65 +20,60 @@ $projectRoot = dirname(__DIR__);
 $publicRoot = realpath($projectRoot.'/public');
 
 // Di Vercel hanya /tmp yang bisa ditulis.
-$writableDirectories = [
+foreach ([
     '/tmp/views',
     '/tmp/storage/app/private',
     '/tmp/storage/app/public',
     '/tmp/storage/framework/cache/data',
     '/tmp/storage/framework/sessions',
     '/tmp/storage/logs',
-];
-
-foreach ($writableDirectories as $directory) {
+] as $directory) {
     if (! is_dir($directory)) {
         @mkdir($directory, 0777, true);
     }
 }
 
 /*
-| Nilai default yang aman untuk serverless. Environment variable yang
-| benar-benar di-set di Vercel Dashboard tidak akan ditimpa.
+| Fallback SQLite: file di /tmp tidak ikut ter-pack dari proses build, jadi
+| saat cold start kita buat lalu migrate + seed. Dijalankan di proses PHP
+| terpisah supaya public/index.php tetap menjadi satu-satunya bootstrap
+| untuk request HTTP (menghindari require_once bootstrap/app.php dua kali).
 */
-$defaults = [
-    // Demo key. Ganti lewat Environment Variable APP_KEY di Vercel untuk penggunaan nyata.
-    'APP_KEY' => 'base64:zEVW+oggDlxyM8/PursFx3saTP134xjklQthL9Zdg6U=',
-    'APP_ENV' => 'production',
-    'APP_DEBUG' => 'false',
-    'APP_MAINTENANCE_DRIVER' => 'file',
-    'APP_LOCALE' => 'id',
-    'APP_FALLBACK_LOCALE' => 'id',
-    'APP_FAKER_LOCALE' => 'id_ID',
-    'APP_TIMEZONE' => 'Asia/Jakarta',
-    'LOG_CHANNEL' => 'stderr',
-    'SESSION_DRIVER' => 'cookie',
-    'CACHE_STORE' => 'array',
-    'QUEUE_CONNECTION' => 'sync',
-    'FILESYSTEM_DISK' => 'local',
-    'UPLOAD_DRIVER' => 'database',
-    'VIEW_COMPILED_PATH' => '/tmp/views',
-    'APP_CONFIG_CACHE' => '/tmp/config.php',
-    'APP_EVENTS_CACHE' => '/tmp/events.php',
-    'APP_PACKAGES_CACHE' => '/tmp/packages.php',
-    'APP_ROUTES_CACHE' => '/tmp/routes.php',
-    'APP_SERVICES_CACHE' => '/tmp/services.php',
-];
+$dbUrl = getenv('DB_URL') ?: '';
+$dbConnection = getenv('DB_CONNECTION') ?: 'sqlite';
 
-$trackedKeys = array_values(array_unique(array_merge(
-    array_keys($defaults),
-    ['APP_URL', 'DB_CONNECTION', 'DB_DATABASE', 'DB_URL']
-)));
-
-// Catat env asli SEBELUM Laravel memuat file .env (jika ada).
-$hasProcessEnv = [];
-foreach ($trackedKeys as $key) {
-    $hasProcessEnv[$key] = getenv($key) !== false;
+// Sama seperti config/database.php: DB_URL kosong + driver eksternal di Vercel
+// harus jatuh ke SQLite, bukan ke 127.0.0.1:5432/3306.
+if (getenv('VERCEL') !== false && $dbUrl === ''
+    && in_array($dbConnection, ['pgsql', 'mysql', 'mariadb', 'sqlsrv'], true)) {
+    $dbConnection = 'sqlite';
 }
 
-/*
-| -------------------------------------------------------------------------
-| Serve static assets (CSS/JS dari Vite, gambar, favicon, dll.)
-| -------------------------------------------------------------------------
-*/
+$configuredDatabase = getenv('DB_DATABASE') ?: '';
+$databasePath = getenv('VERCEL')
+    ? (($configuredDatabase !== ''
+        && (str_ends_with($configuredDatabase, '.sqlite') || str_starts_with($configuredDatabase, '/tmp/')))
+        ? $configuredDatabase
+        : '/tmp/database.sqlite')
+    : ($configuredDatabase !== '' ? $configuredDatabase : $projectRoot.'/database/database.sqlite');
+
+if ($dbUrl === ''
+    && $dbConnection === 'sqlite'
+    && str_starts_with($databasePath, '/tmp/')
+    && ! file_exists($databasePath)) {
+    @touch($databasePath);
+
+    $artisan = $projectRoot.'/artisan';
+
+    if (is_file($artisan) && function_exists('exec')) {
+        $php = escapeshellarg(PHP_BINARY);
+        $artisanPath = escapeshellarg($artisan);
+
+        exec($php.' '.$artisanPath.' migrate --force --no-interaction 2>&1');
+        exec($php.' '.$artisanPath.' db:seed --force --no-interaction 2>&1');
+    }
+}
+
 $mimeTypes = [
     'css' => 'text/css; charset=utf-8',
     'js' => 'application/javascript; charset=utf-8',
@@ -114,11 +108,7 @@ if ($publicRoot !== false && $requestPath !== '/' && ! str_starts_with($requestP
             header('Content-Type: '.$mimeTypes[$extension]);
             header('Content-Length: '.(string) filesize($candidate));
             header('X-Content-Type-Options: nosniff');
-            header('Cache-Control: '.(
-                str_starts_with($requestPath, '/build/')
-                    ? 'public, max-age=31536000, immutable'
-                    : 'public, max-age=3600'
-            ));
+            header('Cache-Control: public, max-age=31536000, immutable');
 
             readfile($candidate);
             exit;
@@ -126,62 +116,8 @@ if ($publicRoot !== false && $requestPath !== '/' && ! str_starts_with($requestP
     }
 }
 
-/*
-| -------------------------------------------------------------------------
-| Bootstrap Laravel, lalu terapkan default serverless
-| -------------------------------------------------------------------------
-*/
-require $projectRoot.'/vendor/autoload.php';
+// Pastikan tidak ada header "download" yang terbawa ke respons Laravel.
+// Content-Type HTML/JSON akan ditetapkan sendiri oleh Laravel.
+header_remove('Content-Disposition');
 
-/** @var \Illuminate\Foundation\Application $app */
-$app = require_once $projectRoot.'/bootstrap/app.php';
-
-foreach ($defaults as $key => $value) {
-    if (! $hasProcessEnv[$key]) {
-        putenv($key.'='.$value);
-        $_ENV[$key] = $_SERVER[$key] = $value;
-    }
-}
-
-// APP_URL mengikuti host Vercel bila tidak diset eksplisit.
-if (! $hasProcessEnv['APP_URL']) {
-    $host = $_SERVER['VERCEL_URL'] ?? $_SERVER['HTTP_HOST'] ?? '';
-    if (is_string($host) && $host !== '') {
-        if (! str_starts_with($host, 'http')) {
-            $host = 'https://'.$host;
-        }
-        putenv('APP_URL='.$host);
-        $_ENV['APP_URL'] = $_SERVER['APP_URL'] = $host;
-    }
-}
-
-// Tanpa DB_URL, pakai SQLite sementara di /tmp.
-if (! $hasProcessEnv['DB_URL']) {
-    if (! $hasProcessEnv['DB_CONNECTION']) {
-        putenv('DB_CONNECTION=sqlite');
-        $_ENV['DB_CONNECTION'] = $_SERVER['DB_CONNECTION'] = 'sqlite';
-    }
-
-    if (! $hasProcessEnv['DB_DATABASE']) {
-        putenv('DB_DATABASE=/tmp/database.sqlite');
-        $_ENV['DB_DATABASE'] = $_SERVER['DB_DATABASE'] = '/tmp/database.sqlite';
-    }
-}
-
-$dbConnection = getenv('DB_CONNECTION') ?: 'sqlite';
-$dbUrl = getenv('DB_URL') ?: '';
-$database = getenv('DB_DATABASE') ?: '/tmp/database.sqlite';
-
-if ($dbConnection === 'sqlite' && $dbUrl === '' && $database !== ':memory:' && ! file_exists($database)) {
-    touch($database);
-
-    $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
-    $kernel->call('migrate', ['--force' => true, '--no-interaction' => true]);
-    $kernel->call('db:seed', ['--force' => true, '--no-interaction' => true]);
-}
-
-if (file_exists($maintenance = $projectRoot.'/storage/framework/maintenance.php')) {
-    require $maintenance;
-}
-
-$app->handleRequest(\Illuminate\Http\Request::capture());
+require __DIR__ . '/../public/index.php';

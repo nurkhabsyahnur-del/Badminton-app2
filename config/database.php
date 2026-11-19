@@ -3,6 +3,28 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+/*
+| Di Vercel, DB_URL kosong + DB_CONNECTION=pgsql/mysql akan membuat Laravel
+| mencoba host bawaan 127.0.0.1 (port 5432/3306) dan aplikasi mati. Bila
+| DB_URL tidak diisi, paksa koneksi SQLite sementara di /tmp.
+*/
+$dbUrl = env('DB_URL') ?: null;
+$defaultConnection = env('DB_CONNECTION', 'sqlite');
+
+if (env('VERCEL') && $dbUrl === null
+    && in_array($defaultConnection, ['pgsql', 'mysql', 'mariadb', 'sqlsrv'], true)) {
+    $defaultConnection = 'sqlite';
+}
+
+// Di Vercel, nama database Postgres/MySQL bukan path SQLite yang valid.
+$configuredDatabase = env('DB_DATABASE');
+$sqliteDatabase = env('VERCEL')
+    ? (($configuredDatabase
+        && (str_ends_with($configuredDatabase, '.sqlite') || str_starts_with($configuredDatabase, '/tmp/')))
+        ? $configuredDatabase
+        : '/tmp/database.sqlite')
+    : ($configuredDatabase ?: database_path('database.sqlite'));
+
 return [
 
     /*
@@ -17,7 +39,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => $defaultConnection,
 
     /*
     |--------------------------------------------------------------------------
@@ -34,9 +56,9 @@ return [
 
         'sqlite' => [
             'driver' => 'sqlite',
-            'url' => env('DB_URL'),
+            'url' => $dbUrl,
             // Di Vercel, gunakan /tmp karena filesystem project bersifat read-only.
-            'database' => env('DB_DATABASE', env('VERCEL') ? '/tmp/database.sqlite' : database_path('database.sqlite')),
+            'database' => $sqliteDatabase,
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
             'busy_timeout' => null,
@@ -47,7 +69,7 @@ return [
 
         'mysql' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL'),
+            'url' => $dbUrl,
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -67,7 +89,7 @@ return [
 
         'mariadb' => [
             'driver' => 'mariadb',
-            'url' => env('DB_URL'),
+            'url' => $dbUrl,
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -87,7 +109,7 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL'),
+            'url' => $dbUrl,
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -102,7 +124,7 @@ return [
 
         'sqlsrv' => [
             'driver' => 'sqlsrv',
-            'url' => env('DB_URL'),
+            'url' => $dbUrl,
             'host' => env('DB_HOST', 'localhost'),
             'port' => env('DB_PORT', '1433'),
             'database' => env('DB_DATABASE', 'laravel'),

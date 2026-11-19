@@ -172,7 +172,9 @@ class BookingController extends Controller
         }
 
         // Di Vercel, storage/ tidak persisten: simpan gambar sebagai data URI di database.
-        if (env('UPLOAD_DRIVER', 'file') === 'database') {
+        $uploadDriver = env('UPLOAD_DRIVER', env('VERCEL') ? 'database' : 'file');
+
+        if ($uploadDriver === 'database') {
             $buktiTransfer = 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($file->getRealPath()));
         } else {
             $buktiTransfer = 'bukti_'.time().'_'.Str::random(6).'.'.$extension;

@@ -1,6 +1,8 @@
 .git
 node_modules
-vendor
+
+# vendor sengaja TIDAK diabaikan. Runtime vercel-php tetap menjalankan
+# composer install saat build, tetapi folder vendor lokal boleh ikut ter-upload.
 .env
 .env.local
 .env.production
@@ -13,3 +15,7 @@ storage/logs/*
 tests
 .phpunit.cache
 .phpunit.result.cache
+
+# Pastikan hasil Vite tidak diblokir.
+!public/build
+!public/build/**

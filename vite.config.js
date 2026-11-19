@@ -10,6 +10,11 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    build: {
+        // Pastikan hasil build Vite masuk ke public/build, bukan dist/.
+        outDir: 'public/build',
+        emptyOutDir: true,
+    },
     server: {
         watch: {
             ignored: ['**/storage/framework/views/**'],

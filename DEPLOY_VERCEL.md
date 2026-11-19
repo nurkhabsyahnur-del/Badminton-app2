@@ -2,9 +2,10 @@
 
 ## Ringkasan perubahan
 
-- `vercel.json` → memakai runtime PHP `vercel-php@0.8.0` (PHP 8.4).
-- `api/index.php` → entry point serverless, melayani aset `public/`, menyiapkan folder `/tmp`, dan auto `migrate --seed` untuk SQLite sementara.
-- `composer.json` → script `vercel` menjalankan `npm install`, `npm run build`, `migrate --force`, dan `db:seed --force` saat build.
+- `vercel.json` → memakai builder eksplisit: `vercel-php@0.8.0` untuk `api/index.php` dan `@vercel/static` **hanya untuk aset** (`public/build/**`, `public/images/**`, `favicon.ico`, `robots.txt`). `public/index.php` dan `.htaccess` sengaja **tidak** ikut ter-build sebagai statis — ini penyebab URL mengunduh file 543 B. Request lain diarahkan ke `/api/index.php`.
+- `api/index.php` → entry point serverless yang akhirnya memanggil `public/index.php`, dengan fallback aset statis, folder `/tmp`, auto `migrate --seed` SQLite saat cold start, dan `header_remove('Content-Disposition')`.
+- `config/database.php` → bila `DB_URL` kosong di Vercel, `pgsql`/`mysql` otomatis jatuh ke SQLite `/tmp/database.sqlite` (tidak mencoba `127.0.0.1:5432`).
+- `composer.json` → script `vercel` menyiapkan file SQLite, lalu menjalankan `npm install`, `npm run build`, `migrate --force`, dan `db:seed --force` saat build.
 - Session/cache/queue diubah ke `cookie` / `array` / `sync` agar aman di filesystem read-only Vercel.
 - Upload bukti transfer disimpan sebagai data URI di database (`UPLOAD_DRIVER=database`) supaya tidak bergantung pada `storage/` yang tidak persisten.
 
@@ -129,7 +130,10 @@ Buka `http://localhost:8000`.
 
 ## Troubleshooting singkat
 
+- **`STATIC_BUILD_NO_OUT_DIR: dist`** → jangan biarkan Vercel auto-detect Vite. Pastikan `vercel.json` memakai `builds` dengan `vercel-php` + `@vercel/static`, bukan build statis `dist`.
 - **500 / "No application encryption key"** → `APP_KEY` belum ada di Vercel.
 - **Tabel tidak ditemukan** → cek `DB_URL`/`DB_CONNECTION`, lalu pastikan script `vercel` di `composer.json` tidak dihapus. Atau jalankan sekali: `vercel env pull .env.vercel.local` lalu `php artisan migrate --force`.
+- **URL mengunduh file kecil (~543 B)** → `public/index.php` ikut ter-build sebagai `@vercel/static`. Pastikan glob static hanya mencakup aset (`public/build/**`, `public/images/**`, `favicon.ico`, `robots.txt`), bukan `public/**`.
 - **CSS/JS 404** → pastikan `npm run build` berhasil dan `public/build/manifest.json` ikut ter-upload. Cek log build Vercel.
+- **Error `127.0.0.1:5432`** → jangan set `DB_CONNECTION=pgsql` dengan `DB_URL` kosong. Isi keduanya, atau biarkan `DB_CONNECTION=sqlite` + `DB_URL=` kosong.
 - **Function timeout saat cold start** → `maxDuration` sudah diset 60 detik di `vercel.json`; bisa dinaikkan di dashboard jika pakai plan berbayar.
