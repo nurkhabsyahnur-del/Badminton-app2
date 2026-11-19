@@ -11,7 +11,7 @@
 </div>
 
 <!-- Filter Status Tabs -->
-<div class="card stat-card bg-white p-3 mb-4">
+<div class="card bg-white border-0 shadow-sm p-3 mb-4 rounded-3">
     <div class="d-flex flex-wrap gap-2">
         <a href="{{ route('admin.pesanan') }}" class="btn btn-sm {{ !$status ? 'btn-primary' : 'btn-outline-secondary' }} rounded-pill px-3">
             Semua Pesanan
@@ -32,9 +32,9 @@
 </div>
 
 <!-- Tabel Pesanan (Sesuai Skripsi Kating: Gambar 26 & 35) -->
-<div class="card stat-card bg-white p-4">
+<div class="card bg-white border-0 shadow-sm p-4 rounded-3">
     <div class="table-responsive">
-        <table class="table table-hover align-middle">
+        <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
                     <th>Kode Booking</th>
@@ -73,35 +73,17 @@
                         </td>
                         <td>
                             @if($p->pembayaran && $p->pembayaran->bukti_transfer)
-                                <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalBukti{{ $p->id }}">
+                                <button type="button" 
+                                    class="btn btn-sm btn-outline-info rounded-pill px-3" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#modalBukti"
+                                    data-kode="{{ $p->kode_booking }}"
+                                    data-metode="{{ $p->pembayaran->metode_pembayaran }}"
+                                    data-pengirim="{{ $p->pembayaran->nama_pengirim ?? '-' }}"
+                                    data-bank="{{ $p->pembayaran->bank_pengirim ?? '-' }}"
+                                    data-foto="{{ $p->pembayaran->bukti_transfer_url }}">
                                     <i class="bi bi-image me-1"></i> Lihat Foto
                                 </button>
-
-                                <!-- Modal Bukti Transfer -->
-                                <div class="modal fade" id="modalBukti{{ $p->id }}" tabindex="-1">
-                                    <div class="modal-dialog modal-dialog-centered">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h6 class="modal-title fw-bold">Bukti Pembayaran - {{ $p->kode_booking }}</h6>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body text-center bg-light">
-                                                <div class="mb-2">
-                                                    <span class="badge {{ $p->pembayaran->metode_pembayaran === 'qris' ? 'bg-danger' : 'bg-primary' }}">
-                                                        {{ $p->pembayaran->metode_pembayaran === 'qris' ? 'QRIS' : 'Transfer Bank' }}
-                                                    </span>
-                                                </div>
-                                                <p class="small text-muted mb-2">
-                                                    Pengirim: <strong>{{ $p->pembayaran->nama_pengirim }}</strong> ({{ $p->pembayaran->bank_pengirim }})
-                                                </p>
-                                                <img src="{{ $p->pembayaran->bukti_transfer_url }}" class="img-fluid rounded border shadow-sm" style="max-height: 400px;">
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary btn-sm rounded-pill" data-bs-dismiss="modal">Tutup</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             @else
                                 <span class="text-muted small">- Belum ada -</span>
                             @endif
@@ -149,4 +131,68 @@
         {{ $pesanans->links() }}
     </div>
 </div>
+
+<!-- ============================================================== -->
+<!-- MODAL BUKTI TRANSFER (Ditempatkan di luar tabel untuk mencegah flickering) -->
+<!-- ============================================================== -->
+<div class="modal fade" id="modalBukti" tabindex="-1" aria-labelledby="modalBuktiLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0 rounded-4">
+            <div class="modal-header border-bottom pb-3">
+                <h6 class="modal-title fw-bold" id="modalBuktiLabel">
+                    Bukti Pembayaran - <span id="bukti_kode" class="font-monospace text-primary"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center bg-light py-3">
+                <div class="mb-2">
+                    <span id="bukti_metode_badge" class="badge"></span>
+                </div>
+                <p class="small text-muted mb-3">
+                    Pengirim: <strong id="bukti_pengirim" class="text-dark"></strong> (<span id="bukti_bank"></span>)
+                </p>
+                <div class="d-flex justify-content-center">
+                    <img id="bukti_img" src="" alt="Bukti Transfer" class="img-fluid rounded border shadow-sm" style="max-height: 420px; object-fit: contain;">
+                </div>
+            </div>
+            <div class="modal-footer border-top pt-2">
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalBukti = document.getElementById('modalBukti');
+        if (modalBukti) {
+            modalBukti.addEventListener('show.bs.modal', function (event) {
+                const btn = event.relatedTarget;
+                if (!btn) return;
+
+                const kode = btn.getAttribute('data-kode') || '';
+                const metode = (btn.getAttribute('data-metode') || '').toLowerCase();
+                const pengirim = btn.getAttribute('data-pengirim') || '-';
+                const bank = btn.getAttribute('data-bank') || '-';
+                const foto = btn.getAttribute('data-foto') || '';
+
+                document.getElementById('bukti_kode').textContent = kode;
+                document.getElementById('bukti_pengirim').textContent = pengirim;
+                document.getElementById('bukti_bank').textContent = bank;
+                document.getElementById('bukti_img').src = foto;
+
+                const badge = document.getElementById('bukti_metode_badge');
+                if (metode === 'qris') {
+                    badge.className = 'badge bg-danger rounded-pill px-3 py-1';
+                    badge.textContent = 'QRIS';
+                } else {
+                    badge.className = 'badge bg-primary rounded-pill px-3 py-1';
+                    badge.textContent = 'Transfer Bank';
+                }
+            });
+        }
+    });
+</script>
+@endpush
