@@ -43,7 +43,7 @@ class AppServiceProvider extends ServiceProvider
                     @chmod($dbPath, 0666);
                 }
 
-                if (! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+                if (! \Illuminate\Support\Facades\Schema::hasTable('users') || ! \Illuminate\Support\Facades\Schema::hasColumn('users', 'username')) {
                     \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
                     \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
                 }
