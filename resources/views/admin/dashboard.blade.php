@@ -136,4 +136,69 @@
         </div>
     @endif
 </div>
+
+<!-- Bagian Data Anggota Terbaru -->
+<div class="card stat-card bg-white p-4 mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h5 class="fw-bold text-dark mb-0">
+                <i class="bi bi-people-fill text-primary me-2"></i> Data Anggota / Pelanggan Terdaftar
+            </h5>
+            <small class="text-muted">Total <strong>{{ $totalAnggota }}</strong> pelanggan aktif terdaftar di sistem GOR Metro</small>
+        </div>
+        <a href="{{ route('admin.anggota.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
+            <i class="bi bi-person-gear me-1"></i> Kelola Semua Data Anggota <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+    </div>
+
+    @if($anggotaTerbaru->isEmpty())
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-person-x fs-2 text-secondary mb-2 d-block"></i>
+            Belum ada anggota / pelanggan yang terdaftar.
+        </div>
+    @else
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nama Lengkap</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>No. WhatsApp</th>
+                        <th>Role</th>
+                        <th>Terdaftar</th>
+                        <th class="text-end">Aksi Cepat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($anggotaTerbaru as $member)
+                        <tr>
+                            <td class="fw-semibold">
+                                <i class="bi bi-person-circle text-secondary me-1"></i> {{ $member->name }}
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ '@' . $member->username }}</span></td>
+                            <td><span class="text-muted small">{{ $member->email }}</span></td>
+                            <td>
+                                <a href="https://wa.me/{{ preg_replace('/^0/', '62', $member->no_hp) }}" target="_blank" class="text-success text-decoration-none">
+                                    <i class="bi bi-whatsapp me-1"></i> {{ $member->no_hp }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge {{ $member->role === 'admin' ? 'bg-danger' : 'bg-primary' }} rounded-pill">
+                                    {{ ucfirst($member->role) }}
+                                </span>
+                            </td>
+                            <td class="small text-muted">{{ $member->created_at ? $member->created_at->format('d M Y') : '-' }}</td>
+                            <td class="text-end">
+                                <a href="{{ route('admin.anggota.index', ['q' => $member->username]) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                                    <i class="bi bi-pencil-square me-1"></i> Edit / Detail
+                                </a>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
+</div>
 @endsection

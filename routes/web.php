@@ -39,4 +39,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/lapangan', [AdminController::class, 'lapangan'])->name('lapangan');
     Route::post('/lapangan/update/{id}', [AdminController::class, 'updateLapangan'])->name('lapangan.update');
     Route::get('/rekap', [AdminController::class, 'rekap'])->name('rekap');
+
+    // Manajemen Data Anggota (CRUD)
+    Route::get('/anggota', [AdminController::class, 'anggota'])->name('anggota.index');
+    Route::post('/anggota/store', [AdminController::class, 'storeAnggota'])->name('anggota.store');
+    Route::post('/anggota/update/{id}', [AdminController::class, 'updateAnggota'])->name('anggota.update');
+    Route::delete('/anggota/{id}', [AdminController::class, 'deleteAnggota'])->name('anggota.delete');
+    Route::post('/anggota/delete/{id}', [AdminController::class, 'deleteAnggota']);
 });

@@ -97,6 +97,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="{{ route('admin.anggota.index') }}" class="nav-link {{ request()->routeIs('admin.anggota*') ? 'active' : '' }}">
+                    <i class="bi bi-people"></i> Data Anggota
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{{ route('admin.rekap') }}" class="nav-link {{ request()->routeIs('admin.rekap') ? 'active' : '' }}">
                     <i class="bi bi-file-earmark-bar-graph"></i> Rekapitulasi Laporan
                 </a>
