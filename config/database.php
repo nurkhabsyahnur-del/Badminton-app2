@@ -1,29 +1,34 @@
 <?php
 
+use App\Support\VercelDatabase;
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
 /*
-| Di Vercel, DB_URL kosong + DB_CONNECTION=pgsql/mysql akan membuat Laravel
-| mencoba host bawaan 127.0.0.1 (port 5432/3306) dan aplikasi mati. Bila
-| DB_URL tidak diisi, paksa koneksi SQLite sementara di /tmp.
+| Konfigurasi DB yang aman untuk Vercel.
+|
+| DB_URL / DB_HOST yang kosong atau masih placeholder ("...") TIDAK boleh
+| diteruskan ke PDO, karena akan memicu:
+|   SQLSTATE[08006] could not translate host name "..." to address
+|
+| Bila tidak ada URL/host eksternal yang valid, pakai SQLite /tmp.
 */
-$dbUrl = env('DB_URL') ?: null;
-$defaultConnection = env('DB_CONNECTION', 'sqlite');
+$onVercel = (bool) env('VERCEL');
 
-if (env('VERCEL') && $dbUrl === null
-    && in_array($defaultConnection, ['pgsql', 'mysql', 'mariadb', 'sqlsrv'], true)) {
-    $defaultConnection = 'sqlite';
-}
+$dbUrl = VercelDatabase::validUrl(env('DB_URL'));
+$dbHost = VercelDatabase::validHost(env('DB_HOST'));
+$dbPort = VercelDatabase::validPort(env('DB_PORT'));
+$dbName = VercelDatabase::validDatabaseName(env('DB_DATABASE'));
 
-// Di Vercel, nama database Postgres/MySQL bukan path SQLite yang valid.
-$configuredDatabase = env('DB_DATABASE');
-$sqliteDatabase = env('VERCEL')
-    ? (($configuredDatabase
-        && (str_ends_with($configuredDatabase, '.sqlite') || str_starts_with($configuredDatabase, '/tmp/')))
-        ? $configuredDatabase
-        : '/tmp/database.sqlite')
-    : ($configuredDatabase ?: database_path('database.sqlite'));
+$requestedConnection = env('DB_CONNECTION', 'sqlite');
+$defaultConnection = VercelDatabase::shouldUseSqlite($requestedConnection, $dbUrl, $dbHost, $onVercel)
+    ? 'sqlite'
+    : $requestedConnection;
+
+$sqliteDatabase = VercelDatabase::sqliteDatabase(env('DB_DATABASE'), $onVercel);
+
+$externalHost = $dbHost ?? '127.0.0.1';
+$externalDatabase = $dbName ?? 'laravel';
 
 return [
 
@@ -56,7 +61,8 @@ return [
 
         'sqlite' => [
             'driver' => 'sqlite',
-            'url' => $dbUrl,
+            // URL Postgres/MySQL tidak boleh dipakai koneksi SQLite.
+            'url' => null,
             // Di Vercel, gunakan /tmp karena filesystem project bersifat read-only.
             'database' => $sqliteDatabase,
             'prefix' => '',
@@ -70,9 +76,9 @@ return [
         'mysql' => [
             'driver' => 'mysql',
             'url' => $dbUrl,
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
+            'host' => $externalHost,
+            'port' => $dbPort ?? 3306,
+            'database' => $externalDatabase,
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
@@ -90,9 +96,9 @@ return [
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => $dbUrl,
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
+            'host' => $externalHost,
+            'port' => $dbPort ?? 3306,
+            'database' => $externalDatabase,
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
@@ -110,9 +116,9 @@ return [
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => $dbUrl,
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'laravel'),
+            'host' => $externalHost,
+            'port' => $dbPort ?? 5432,
+            'database' => $externalDatabase,
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
@@ -125,9 +131,9 @@ return [
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => $dbUrl,
-            'host' => env('DB_HOST', 'localhost'),
-            'port' => env('DB_PORT', '1433'),
-            'database' => env('DB_DATABASE', 'laravel'),
+            'host' => $externalHost,
+            'port' => $dbPort ?? 1433,
+            'database' => $externalDatabase,
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),

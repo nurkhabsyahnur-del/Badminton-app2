@@ -19,6 +19,9 @@ declare(strict_types=1);
 $projectRoot = dirname(__DIR__);
 $publicRoot = realpath($projectRoot.'/public');
 
+// Helper validasi DB dipakai bersama config/database.php dan scripts/vercel-db.php.
+require_once $projectRoot.'/app/Support/VercelDatabase.php';
+
 // Di Vercel hanya /tmp yang bisa ditulis.
 foreach ([
     '/tmp/views',
@@ -38,27 +41,25 @@ foreach ([
 | saat cold start kita buat lalu migrate + seed. Dijalankan di proses PHP
 | terpisah supaya public/index.php tetap menjadi satu-satunya bootstrap
 | untuk request HTTP (menghindari require_once bootstrap/app.php dua kali).
+|
+| Validasi DB_URL/DB_HOST memakai helper yang sama dengan config/database.php,
+| sehingga placeholder "..." tidak pernah diteruskan ke PDO.
 */
-$dbUrl = getenv('DB_URL') ?: '';
-$dbConnection = getenv('DB_CONNECTION') ?: 'sqlite';
+$onVercel = getenv('VERCEL') !== false;
+$dbUrl = \App\Support\VercelDatabase::validUrl(getenv('DB_URL') ?: null);
+$dbHost = \App\Support\VercelDatabase::validHost(getenv('DB_HOST') ?: null);
+$useSqlite = \App\Support\VercelDatabase::shouldUseSqlite(
+    getenv('DB_CONNECTION') ?: null,
+    $dbUrl,
+    $dbHost,
+    $onVercel
+);
+$databasePath = \App\Support\VercelDatabase::sqliteDatabase(
+    getenv('DB_DATABASE') ?: null,
+    $onVercel
+);
 
-// Sama seperti config/database.php: DB_URL kosong + driver eksternal di Vercel
-// harus jatuh ke SQLite, bukan ke 127.0.0.1:5432/3306.
-if (getenv('VERCEL') !== false && $dbUrl === ''
-    && in_array($dbConnection, ['pgsql', 'mysql', 'mariadb', 'sqlsrv'], true)) {
-    $dbConnection = 'sqlite';
-}
-
-$configuredDatabase = getenv('DB_DATABASE') ?: '';
-$databasePath = getenv('VERCEL')
-    ? (($configuredDatabase !== ''
-        && (str_ends_with($configuredDatabase, '.sqlite') || str_starts_with($configuredDatabase, '/tmp/')))
-        ? $configuredDatabase
-        : '/tmp/database.sqlite')
-    : ($configuredDatabase !== '' ? $configuredDatabase : $projectRoot.'/database/database.sqlite');
-
-if ($dbUrl === ''
-    && $dbConnection === 'sqlite'
+if ($useSqlite
     && str_starts_with($databasePath, '/tmp/')
     && ! file_exists($databasePath)) {
     @touch($databasePath);
