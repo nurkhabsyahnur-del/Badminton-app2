@@ -91,7 +91,7 @@ $databasePath = \App\Support\VercelDatabase::sqliteDatabase(
 
 if ($useSqlite
     && str_starts_with($databasePath, '/tmp/')
-    && ! file_exists($databasePath)) {
+    && (! file_exists($databasePath) || filesize($databasePath) === 0)) {
     $candidates = [
         $projectRoot.'/database/database.sqlite',
         $projectRoot.'/db_badminton',

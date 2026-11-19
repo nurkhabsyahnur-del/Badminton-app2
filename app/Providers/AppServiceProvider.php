@@ -34,5 +34,17 @@ class AppServiceProvider extends ServiceProvider
         if ($https) {
             URL::forceScheme('https');
         }
+
+        // Pastikan tabel database siap jika berjalan di Vercel / serverless (in-process migration)
+        if ((getenv('VERCEL') !== false && getenv('VERCEL') !== '') || (bool) env('VERCEL') || app()->environment('production')) {
+            try {
+                if (! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+                    \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+                    \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
+                }
+            } catch (\Throwable $e) {
+                // Abaikan jika konfigurasi DB belum valid agar aplikasi tidak crash
+            }
+        }
     }
 }
