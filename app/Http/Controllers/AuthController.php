@@ -43,8 +43,9 @@ class AuthController extends Controller
                 return redirect()->intended(route('home'))->with('success', 'Berhasil login! Selamat datang di GOR Metro Badminton.');
             }
         } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Login error: ' . $e->getMessage(), ['exception' => $e]);
             return back()->withErrors([
-                'login_error' => 'Koneksi database belum tersedia atau bermasalah. Harap periksa koneksi database Anda.',
+                'login_error' => 'Koneksi database bermasalah: ' . $e->getMessage(),
             ])->onlyInput('username');
         }
 
@@ -104,8 +105,9 @@ class AuthController extends Controller
             if ($e instanceof \Illuminate\Validation\ValidationException) {
                 throw $e;
             }
+            \Illuminate\Support\Facades\Log::error('Register error: ' . $e->getMessage(), ['exception' => $e]);
             return back()->withErrors([
-                'register_error' => 'Koneksi database belum tersedia. Harap periksa konfigurasi database Anda.',
+                'register_error' => 'Koneksi database bermasalah: ' . $e->getMessage(),
             ])->withInput();
         }
     }

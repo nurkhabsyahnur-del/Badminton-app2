@@ -89,34 +89,38 @@ $databasePath = \App\Support\VercelDatabase::sqliteDatabase(
     $onVercel
 );
 
-if ($useSqlite
-    && str_starts_with($databasePath, '/tmp/')
-    && (! file_exists($databasePath) || filesize($databasePath) === 0)) {
-    $candidates = [
-        $projectRoot.'/database/database.sqlite',
-        $projectRoot.'/db_badminton',
-    ];
-    $copied = false;
-    foreach ($candidates as $candidate) {
-        if (is_file($candidate) && filesize($candidate) > 0) {
-            @copy($candidate, $databasePath);
-            $copied = true;
-            break;
+if ($useSqlite && str_starts_with($databasePath, '/tmp/')) {
+    if (! file_exists($databasePath) || filesize($databasePath) === 0) {
+        $candidates = [
+            $projectRoot.'/database/database.sqlite',
+            $projectRoot.'/db_badminton',
+        ];
+        $copied = false;
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate) && filesize($candidate) > 0) {
+                @copy($candidate, $databasePath);
+                $copied = true;
+                break;
+            }
+        }
+
+        if (! $copied) {
+            @touch($databasePath);
+
+            $artisan = $projectRoot.'/artisan';
+
+            if (is_file($artisan) && function_exists('exec')) {
+                $php = escapeshellarg(PHP_BINARY);
+                $artisanPath = escapeshellarg($artisan);
+
+                exec($php.' '.$artisanPath.' migrate --force --no-interaction 2>&1');
+                exec($php.' '.$artisanPath.' db:seed --force --no-interaction 2>&1');
+            }
         }
     }
 
-    if (! $copied) {
-        @touch($databasePath);
-
-        $artisan = $projectRoot.'/artisan';
-
-        if (is_file($artisan) && function_exists('exec')) {
-            $php = escapeshellarg(PHP_BINARY);
-            $artisanPath = escapeshellarg($artisan);
-
-            exec($php.' '.$artisanPath.' migrate --force --no-interaction 2>&1');
-            exec($php.' '.$artisanPath.' db:seed --force --no-interaction 2>&1');
-        }
+    if (file_exists($databasePath)) {
+        @chmod($databasePath, 0666);
     }
 }
 

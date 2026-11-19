@@ -38,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
         // Pastikan tabel database siap jika berjalan di Vercel / serverless (in-process migration)
         if ((getenv('VERCEL') !== false && getenv('VERCEL') !== '') || (bool) env('VERCEL') || app()->environment('production')) {
             try {
+                $dbPath = config('database.connections.sqlite.database');
+                if (is_string($dbPath) && str_starts_with($dbPath, '/tmp/') && file_exists($dbPath)) {
+                    @chmod($dbPath, 0666);
+                }
+
                 if (! \Illuminate\Support\Facades\Schema::hasTable('users')) {
                     \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
                     \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
