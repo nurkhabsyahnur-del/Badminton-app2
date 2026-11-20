@@ -6,6 +6,7 @@ use App\Models\Lapangan;
 use App\Models\Pemesanan;
 use App\Models\Pembayaran;
 use App\Models\User;
+use App\Services\FonnteService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -82,7 +83,7 @@ class AdminController extends Controller
 
     public function konfirmasiPesanan($id)
     {
-        $pemesanan = Pemesanan::with('pembayaran')->findOrFail($id);
+        $pemesanan = Pemesanan::with(['pembayaran', 'user', 'lapangan'])->findOrFail($id);
         $pemesanan->update(['status' => 'terkonfirmasi']);
 
         if ($pemesanan->pembayaran) {
@@ -92,7 +93,37 @@ class AdminController extends Controller
             ]);
         }
 
-        return back()->with('success', 'Pesanan ' . $pemesanan->kode_booking . ' berhasil dikonfirmasi!');
+        // Kirim notifikasi WhatsApp ke pelanggan via Fonnte
+        // Dibungkus try-catch agar jika gagal, konfirmasi tetap sukses
+        try {
+            if ($pemesanan->user && !empty($pemesanan->user->no_hp)) {
+                $tanggal   = Carbon::parse($pemesanan->tanggal_main)->translatedFormat('l, d F Y');
+                $jamMulai  = substr($pemesanan->jam_mulai, 0, 5);
+                $jamSelesai = substr($pemesanan->jam_selesai, 0, 5);
+                $lapangan  = $pemesanan->lapangan ? 'Lapangan ' . $pemesanan->lapangan->nomor_lapangan : '-';
+                $total     = 'Rp ' . number_format($pemesanan->total_harga, 0, ',', '.');
+
+                $pesan = "✅ *Konfirmasi Pemesanan Lapangan Badminton*\n\n"
+                    . "Halo, *{$pemesanan->user->name}*!\n"
+                    . "Pembayaran Anda telah *dikonfirmasi* oleh Admin GOR Metro Badminton. 🏸\n\n"
+                    . "📋 *Detail Pemesanan:*\n"
+                    . "🔖 Kode Booking : {$pemesanan->kode_booking}\n"
+                    . "🏟️ Lapangan     : {$lapangan}\n"
+                    . "📅 Tanggal      : {$tanggal}\n"
+                    . "⏰ Jam Bermain  : {$jamMulai} - {$jamSelesai} WIB\n"
+                    . "⏳ Durasi       : {$pemesanan->durasi_jam} Jam\n"
+                    . "💰 Total Bayar  : {$total}\n\n"
+                    . "Silakan datang tepat waktu. Terima kasih telah memilih GOR Metro Badminton! 🙏";
+
+                $fonnte = new FonnteService();
+                $fonnte->kirim($pemesanan->user->no_hp, $pesan);
+            }
+        } catch (\Throwable $e) {
+            // Tidak pernah error 500 meski WA gagal terkirim
+            \Illuminate\Support\Facades\Log::warning('[Konfirmasi] Gagal kirim notifikasi WA: ' . $e->getMessage());
+        }
+
+        return back()->with('success', 'Pesanan ' . $pemesanan->kode_booking . ' berhasil dikonfirmasi! Notifikasi WhatsApp telah dikirim ke pelanggan.');
     }
 
     public function batalkanPesanan(Request $request, $id)
